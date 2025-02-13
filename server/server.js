@@ -19,7 +19,7 @@ const io = new Server(httpServer, {
   },
 });
 
-const PORT = process.env.PORT || 5000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(cors());
@@ -36,7 +36,6 @@ app.use("/api/auth", authRoutes);
 app.use("/api/schedule", scheduleRoutes);
 app.use("/api/users", userRoutes);
 
-const __dirname1 = path
 
 io.on("connection", (socket) => {
   console.log("A user connected");

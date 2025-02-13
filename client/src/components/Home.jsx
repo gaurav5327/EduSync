@@ -12,7 +12,7 @@ const Home = () => {
       >
         <div className="text-center bg-white bg-opacity-75 p-12 rounded-lg shadow-xl">
           <h1 className="text-5xl font-bold text-indigo-600 mb-4">
-            Welcome to Class Scheduler
+            Welcome to EduSync
           </h1>
           <p className="text-xl text-gray-700">
             Efficiently manage your class schedules with ease.
