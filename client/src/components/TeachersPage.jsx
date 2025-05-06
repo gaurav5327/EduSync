@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import Navbar from "./Navbar";
 
-const API_URL = "http://localhost:3000/api/schedule";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/schedule";
 
 function TeachersPage() {
   const [teachers, setTeachers] = useState([]);
