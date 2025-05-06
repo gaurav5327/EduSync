@@ -1,6 +1,6 @@
 import axios from "axios";
 
-const API_URL = "http://localhost:3000/api";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api";
 
 // Login user and store in localStorage
 export const login = async (email, password) => {
