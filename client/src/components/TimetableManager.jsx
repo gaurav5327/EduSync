@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import ScheduleDisplay from "./ScheduleDisplay";
 
-const API_URL = "http://localhost:3000/api/schedule";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/schedule";
 
 const YEARS = [1, 2, 3, 4];
 const BRANCHES = [
