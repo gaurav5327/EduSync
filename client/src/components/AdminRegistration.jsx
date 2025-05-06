@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import axios from "axios";
 import Navbar from "./Navbar";
 
-const API_URL = "http://localhost:3000/api/auth";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/auth";
 
 function RegisterAdminPage() {
   const navigate = useNavigate();
