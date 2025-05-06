@@ -5,8 +5,8 @@ import axios from "axios";
 import { logout, getCurrentUser, updateUserProfile } from "../utils/auth";
 import ScheduleDisplay from "./ScheduleDisplay";
 
-const API_URL = "http://localhost:3000/api/schedule";
-const AUTH_API_URL = "http://localhost:3000/api/auth";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/schedule";
+const AUTH_API_URL = "https://edusync-backend-gvgh.onrender.com/api/auth";
 
 function StudentDashboard() {
   const user = getCurrentUser();
