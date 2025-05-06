@@ -9,7 +9,7 @@ import TimetableManager from "./TimetableManager";
 import TimetableEditor from "./TimetableEditor";
 import { logout, getCurrentUser } from "../utils/auth";
 
-const API_URL = "http://localhost:3000/api/schedule";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/schedule";
 
 const YEARS = [1, 2, 3, 4];
 const BRANCHES = [
