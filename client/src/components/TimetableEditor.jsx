@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-const API_URL = "http://localhost:3000/api/schedule";
+const API_URL = "https://edusync-backend-gvgh.onrender.com/api/schedule";
 
 const DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"];
 const TIME_SLOTS = [
