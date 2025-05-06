@@ -20,88 +20,123 @@ function TeacherDashboard() {
   const user = getCurrentUser();
   const [teacherData, setTeacherData] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [availability, setAvailability] = useState({});
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [courses, setCourses] = useState([]);
   const [schedules, setSchedules] = useState([]);
-  const [activeTab, setActiveTab] = useState("availability");
+  const [activeTab, setActiveTab] = useState("schedules");
+  const [dataFetched, setDataFetched] = useState(false); // Flag to prevent infinite fetching
+
+  // For absence reporting
+  const [absenceData, setAbsenceData] = useState({
+    date: "",
+    reason: "",
+  });
+
+  // For schedule change request
+  const [showScheduleChangeForm, setShowScheduleChangeForm] = useState(false);
+  const [scheduleChangeData, setScheduleChangeData] = useState({
+    day: DAYS[0],
+    timeSlot: TIME_SLOTS[0].value,
+    reason: "",
+  });
 
   useEffect(() => {
-    if (user) {
-      fetchTeacherData();
-      fetchTeacherCourses();
-      fetchTeacherSchedules();
+    // Only fetch data if we haven't already and user exists
+    if (user && !dataFetched) {
+      setDataFetched(true); // Set flag to prevent repeated fetching
+      fetchData();
     }
-  }, [user]);
+  }, [user, dataFetched]);
 
-  const fetchTeacherData = async () => {
+  const fetchData = async () => {
+    setLoading(true);
+    setError("");
+
     try {
-      const response = await axios.get(`${API_URL}/teachers/${user.id}`);
-      setTeacherData(response.data);
+      // Use Promise.all to fetch all data in parallel
+      const [teacherResponse, coursesResponse, schedulesResponse] =
+        await Promise.all([
+          axios.get(`${API_URL}/teachers/${user.id}`),
+          axios.get(`${API_URL}/teacher-courses/${user.id}`),
+          axios.get(`${API_URL}/teacher-schedules/${user.id}`),
+        ]);
 
-      // Initialize availability with teacher's current availability or empty object
-      const teacherAvailability = response.data.availability || {};
-      setAvailability(teacherAvailability);
-      setLoading(false);
+      setTeacherData(teacherResponse.data);
+      setCourses(coursesResponse.data);
+      setSchedules(schedulesResponse.data);
     } catch (error) {
       console.error("Error fetching teacher data:", error);
       setError("Error fetching your data. Please try again later.");
+    } finally {
       setLoading(false);
     }
   };
 
-  const fetchTeacherCourses = async () => {
-    try {
-      const response = await axios.get(`${API_URL}/teacher-courses/${user.id}`);
-      setCourses(response.data);
-    } catch (error) {
-      console.error("Error fetching teacher courses:", error);
-    }
+  const handleAbsenceChange = (e) => {
+    const { name, value } = e.target;
+    setAbsenceData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
   };
 
-  const fetchTeacherSchedules = async () => {
-    try {
-      const response = await axios.get(
-        `${API_URL}/teacher-schedules/${user.id}`
-      );
-      setSchedules(response.data);
-    } catch (error) {
-      console.error("Error fetching teacher schedules:", error);
-    }
-  };
-
-  const handleAvailabilityChange = (day, timeSlot) => {
-    setAvailability((prev) => {
-      // Create a deep copy to avoid mutation issues
-      const newAvailability = { ...prev };
-
-      // Initialize the day if it doesn't exist
-      if (!newAvailability[day]) {
-        newAvailability[day] = {};
-      }
-
-      // Toggle the availability for this time slot
-      newAvailability[day][timeSlot] = !newAvailability[day]?.[timeSlot];
-
-      return newAvailability;
-    });
-  };
-
-  const handleSubmit = async (e) => {
+  const handleAbsenceSubmit = async (e) => {
     e.preventDefault();
+    setError("");
+    setSuccess("");
+
     try {
-      await axios.post(`${API_URL}/teacher-availability`, {
+      await axios.post(`${API_URL}/teacher-absence`, {
         teacherId: user.id,
-        availability,
+        ...absenceData,
       });
-      setSuccess("Availability update request sent successfully!");
-      setError("");
+      setSuccess("Absence reported successfully!");
+      setAbsenceData({
+        date: "",
+        reason: "",
+      });
     } catch (error) {
-      console.error("Error updating availability:", error);
-      setError("Error updating availability. Please try again.");
-      setSuccess("");
+      console.error("Error reporting absence:", error);
+      setError("Error reporting absence. Please try again.");
     }
+  };
+
+  const handleScheduleChangeDataChange = (e) => {
+    const { name, value } = e.target;
+    setScheduleChangeData((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+
+  const handleScheduleChangeSubmit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setSuccess("");
+
+    try {
+      await axios.post(`${API_URL}/schedule-change-request`, {
+        teacherId: user.id,
+        teacherName: user.name,
+        ...scheduleChangeData,
+      });
+      setSuccess("Schedule change request submitted successfully!");
+      setShowScheduleChangeForm(false);
+      setScheduleChangeData({
+        day: DAYS[0],
+        timeSlot: TIME_SLOTS[0].value,
+        reason: "",
+      });
+    } catch (error) {
+      console.error("Error submitting schedule change request:", error);
+      setError("Error submitting request. Please try again.");
+    }
+  };
+
+  // Retry data fetching if there was an error
+  const handleRetryFetch = () => {
+    setDataFetched(false); // Reset the flag to allow fetching again
   };
 
   if (loading) {
@@ -119,16 +154,16 @@ function TeacherDashboard() {
 
   return (
     <div
-      className="min-h-screen"
+      className="min-h-screen bg-gray-100"
       style={{
-        backgroundImage: "url('/background3.jpg')",
+        backgroundImage: "url('/background5.jpg')",
         backgroundSize: "cover",
       }}
     >
       <nav className="bg-indigo-600 shadow-lg">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <h1 className="text-3xl font-bold text-white">Teacher Dashboard</h1>
+            <h1 className="text-3xl font-serif text-white">Teacher Dashboard</h1>
             <div className="flex items-center">
               <span className="text-white mr-4">Welcome, {user?.name}</span>
               <button
@@ -143,25 +178,40 @@ function TeacherDashboard() {
       </nav>
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        {error && (
+          <div
+            className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded relative mb-4"
+            role="alert"
+          >
+            <span className="block sm:inline">{error}</span>
+            <button
+              onClick={handleRetryFetch}
+              className="ml-4 bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
+            >
+              Retry
+            </button>
+          </div>
+        )}
+
         {/* Tabs */}
         <div className="border-b border-gray-200 mb-6">
           <nav className="-mb-px flex space-x-8">
             <button
-              onClick={() => setActiveTab("availability")}
+              onClick={() => setActiveTab("absence")}
               className={`${
-                activeTab === "availability"
+                activeTab === "absence"
                   ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
-              Update Availability
+              Report Absence
             </button>
             <button
               onClick={() => setActiveTab("courses")}
               className={`${
                 activeTab === "courses"
                   ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               My Courses
@@ -171,7 +221,7 @@ function TeacherDashboard() {
               className={`${
                 activeTab === "schedules"
                   ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               My Schedules
@@ -179,50 +229,161 @@ function TeacherDashboard() {
           </nav>
         </div>
 
-        {activeTab === "availability" && (
+        {activeTab === "absence" && (
           <div className="bg-white shadow-md rounded-lg px-8 pt-6 pb-8 mb-4">
             <h2 className="text-2xl font-bold mb-4 text-indigo-600">
-              Update Availability
+              Report Absence
             </h2>
-            <form onSubmit={handleSubmit}>
-              {DAYS.map((day) => (
-                <div key={day} className="mb-4">
-                  <h3 className="text-lg font-semibold mb-2">{day}</h3>
-                  <div className="grid grid-cols-2 gap-2">
-                    {TIME_SLOTS.map((slot) => (
-                      <label
-                        key={slot.value}
-                        className="inline-flex items-center"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={!!availability[day]?.[slot.value]}
-                          onChange={() =>
-                            handleAvailabilityChange(day, slot.value)
-                          }
-                          className="form-checkbox h-5 w-5 text-indigo-600"
-                        />
-                        <span className="ml-2 text-gray-700">{slot.label}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ))}
-              {error && (
-                <p className="text-red-500 text-xs italic mb-4">{error}</p>
-              )}
-              {success && (
-                <p className="text-green-500 text-xs italic mb-4">{success}</p>
-              )}
+            {error && (
+              <p className="text-red-500 text-sm italic mb-4">{error}</p>
+            )}
+            {success && (
+              <p className="text-green-500 text-sm italic mb-4">{success}</p>
+            )}
+
+            <form onSubmit={handleAbsenceSubmit}>
+              <div className="mb-4">
+                <label
+                  className="block text-gray-700 text-sm font-bold mb-2"
+                  htmlFor="date"
+                >
+                  Date of Absence
+                </label>
+                <input
+                  type="date"
+                  id="date"
+                  name="date"
+                  value={absenceData.date}
+                  onChange={handleAbsenceChange}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                  required
+                />
+              </div>
+
+              <div className="mb-4">
+                <label
+                  className="block text-gray-700 text-sm font-bold mb-2"
+                  htmlFor="reason"
+                >
+                  Reason for Absence
+                </label>
+                <textarea
+                  id="reason"
+                  name="reason"
+                  value={absenceData.reason}
+                  onChange={handleAbsenceChange}
+                  className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32"
+                  required
+                ></textarea>
+              </div>
+
               <div className="flex items-center justify-between">
                 <button
                   className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:-translate-y-1 hover:scale-110"
                   type="submit"
                 >
-                  Update Availability
+                  Submit Absence Report
                 </button>
               </div>
             </form>
+
+            <div className="mt-8">
+              <button
+                onClick={() => setShowScheduleChangeForm(true)}
+                className="bg-green-500 hover:bg-green-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out transform hover:-translate-y-1 hover:scale-110"
+              >
+                Request Schedule Change
+              </button>
+            </div>
+
+            {showScheduleChangeForm && (
+              <div className="mt-6 p-4 border border-gray-200 rounded-lg">
+                <h3 className="text-xl font-bold mb-4 text-indigo-600">
+                  Request Schedule Change
+                </h3>
+
+                <form onSubmit={handleScheduleChangeSubmit}>
+                  <div className="mb-4">
+                    <label
+                      className="block text-gray-700 text-sm font-bold mb-2"
+                      htmlFor="day"
+                    >
+                      Day
+                    </label>
+                    <select
+                      id="day"
+                      name="day"
+                      value={scheduleChangeData.day}
+                      onChange={handleScheduleChangeDataChange}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      required
+                    >
+                      {DAYS.map((day) => (
+                        <option key={day} value={day}>
+                          {day}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="mb-4">
+                    <label
+                      className="block text-gray-700 text-sm font-bold mb-2"
+                      htmlFor="timeSlot"
+                    >
+                      Time Slot
+                    </label>
+                    <select
+                      id="timeSlot"
+                      name="timeSlot"
+                      value={scheduleChangeData.timeSlot}
+                      onChange={handleScheduleChangeDataChange}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                      required
+                    >
+                      {TIME_SLOTS.map((slot) => (
+                        <option key={slot.value} value={slot.value}>
+                          {slot.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="mb-4">
+                    <label
+                      className="block text-gray-700 text-sm font-bold mb-2"
+                      htmlFor="changeReason"
+                    >
+                      Reason for Schedule Change
+                    </label>
+                    <textarea
+                      id="changeReason"
+                      name="reason"
+                      value={scheduleChangeData.reason}
+                      onChange={handleScheduleChangeDataChange}
+                      className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline h-32"
+                      required
+                    ></textarea>
+                  </div>
+
+                  <div className="flex items-center justify-between">
+                    <button
+                      className="bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out"
+                      type="submit"
+                    >
+                      Submit Request
+                    </button>
+                    <button
+                      className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out"
+                      type="button"
+                      onClick={() => setShowScheduleChangeForm(false)}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              </div>
+            )}
           </div>
         )}
 
@@ -345,7 +506,7 @@ function TeacherDashboard() {
                                     key={`${day}-${timeSlot.value}`}
                                     className={`py-2 px-4 border ${
                                       slot
-                                        ? slot.course.lectureType === "lab"
+                                        ? slot.course?.lectureType === "lab"
                                           ? "bg-blue-50"
                                           : ""
                                         : "bg-gray-50"
@@ -354,12 +515,13 @@ function TeacherDashboard() {
                                     {slot ? (
                                       <div>
                                         <p className="font-semibold">
-                                          {slot.course.name}
+                                          {slot.course?.name ||
+                                            "Unnamed Course"}
                                         </p>
                                         <p className="text-xs text-gray-500">
-                                          {slot.room.name}
+                                          {slot.room?.name || "No Room"}
                                         </p>
-                                        {slot.course.lectureType === "lab" && (
+                                        {slot.course?.lectureType === "lab" && (
                                           <span className="inline-block bg-blue-100 text-blue-800 text-xs px-2 py-1 rounded mt-1">
                                             Lab
                                           </span>

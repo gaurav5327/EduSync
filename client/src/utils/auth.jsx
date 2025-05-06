@@ -45,6 +45,17 @@ export const getCurrentUser = () => {
   }
 };
 
+// Update user profile in localStorage
+export const updateUserProfile = (userData) => {
+  try {
+    localStorage.setItem("user", JSON.stringify(userData));
+    return userData;
+  } catch (error) {
+    console.error("Error updating user profile in localStorage:", error);
+    throw error;
+  }
+};
+
 // Logout user
 export const logout = () => {
   localStorage.removeItem("user");
@@ -74,4 +85,18 @@ export const redirectBasedOnRole = (user) => {
     default:
       window.location.href = "/";
   }
+};
+
+// Add a function to validate user data
+export const validateUserData = (user) => {
+  if (!user) return false;
+
+  // Check for required fields based on role
+  if (user.role === "student") {
+    return !!user.year && !!user.department && !!user.division;
+  } else if (user.role === "teacher") {
+    return !!user.department;
+  }
+
+  return true;
 };

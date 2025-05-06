@@ -165,10 +165,45 @@ router.get("/timetables", async (req, res) => {
     if (branch) query.branch = branch
     if (division) query.division = division
 
-    const timetables = await Schedule.find(query).sort({ createdAt: -1 })
+    const timetables = await Schedule.find(query)
+      .sort({ createdAt: -1 })
+      .populate({
+        path: "timetable.course",
+        populate: {
+          path: "instructor",
+          select: "name",
+        },
+      })
+      .populate("timetable.room")
+
     res.json(timetables)
   } catch (error) {
     console.error("Error fetching timetables:", error)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Add this route to get a specific timetable by ID
+router.get("/timetables/:id", async (req, res) => {
+  try {
+    const { id } = req.params
+    const timetable = await Schedule.findById(id)
+      .populate({
+        path: "timetable.course",
+        populate: {
+          path: "instructor",
+          select: "name",
+        },
+      })
+      .populate("timetable.room")
+
+    if (!timetable) {
+      return res.status(404).json({ message: "Timetable not found" })
+    }
+
+    res.json(timetable)
+  } catch (error) {
+    console.error("Error fetching timetable:", error)
     res.status(500).json({ message: error.message })
   }
 })
@@ -189,7 +224,28 @@ router.delete("/timetables/:id", async (req, res) => {
 router.get("/latest", async (req, res) => {
   try {
     const { year, branch, division } = req.query
-    const latestSchedule = await Schedule.findOne({ year: Number.parseInt(year), branch, division })
+
+    // Log the received parameters
+    console.log("Fetching latest schedule with params:", { year, branch, division })
+
+    // Validate the parameters
+    if (!year || !branch || !division) {
+      return res.status(400).json({
+        message: "Missing required parameters. Please provide year, branch, and division.",
+      })
+    }
+
+    // Ensure year is a number
+    const yearNum = Number.parseInt(year)
+    if (isNaN(yearNum)) {
+      return res.status(400).json({ message: "Year must be a number." })
+    }
+
+    const latestSchedule = await Schedule.findOne({
+      year: yearNum,
+      branch,
+      division,
+    })
       .sort({ _id: -1 })
       .populate({
         path: "timetable.course",
@@ -199,14 +255,17 @@ router.get("/latest", async (req, res) => {
         },
       })
       .populate("timetable.room")
+
     if (!latestSchedule) {
-      return res.status(404).json({ message: "No schedules found. Please generate a schedule first." })
+      return res.status(404).json({
+        message: "No schedules found for the specified year, branch, and division. Please generate a schedule first.",
+      })
     }
 
     res.json(latestSchedule)
   } catch (error) {
     console.error("Error fetching latest schedule:", error)
-    res.status(500).json({ message: error.message })
+    res.status(500).json({ message: error.message || "Internal server error" })
   }
 })
 
@@ -367,33 +426,52 @@ router.post("/teacher-availability", async (req, res) => {
   try {
     const { teacherId, availability } = req.body
 
+    console.log("Received availability update:", { teacherId, availability })
+
+    // First, update the teacher's availability directly
+    const teacher = await User.findById(teacherId)
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" })
+    }
+
+    // Update the teacher's availability
+    teacher.availability = availability
+    await teacher.save()
+
     // Create a new notification for the admin
     const notification = new Notification({
       type: "AVAILABILITY_UPDATE",
-      message: `Teacher ${teacherId} has requested an availability update.`,
+      message: `Teacher ${teacher.name} has updated their availability.`,
       data: { teacherId, availability },
     })
     await notification.save()
 
-    // Send email notification to admin
-    const transporter = nodemailer.createTransport({
-      host: process.env.SMTP_HOST,
-      port: process.env.SMTP_PORT,
-      secure: false,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-      },
-    })
+    // Try to send email notification to admin if email config is available
+    try {
+      if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          secure: false,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        })
 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USER,
-      to: "admin@example.com", // This should be fetched from the database
-      subject: "Teacher Availability Update Request",
-      text: `Teacher ${teacherId} has requested an availability update. Please check the admin dashboard for details.`,
-    })
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: "admin@example.com", // This should be fetched from the database
+          subject: "Teacher Availability Update",
+          text: `Teacher ${teacher.name} has updated their availability. Please check the admin dashboard for details.`,
+        })
+      }
+    } catch (emailError) {
+      console.error("Error sending email notification:", emailError)
+      // Continue execution even if email fails
+    }
 
-    res.status(200).json({ message: "Availability update request sent successfully" })
+    res.status(200).json({ message: "Availability updated successfully" })
   } catch (error) {
     console.error("Error updating teacher availability:", error)
     res.status(500).json({ message: error.message })
@@ -485,5 +563,213 @@ router.get("/courses-all", async (req, res) => {
     res.status(500).json({ message: error.message })
   }
 })
+
+// Add these routes to handle teacher absence and schedule change requests
+
+// Handle teacher absence reports
+router.post("/teacher-absence", async (req, res) => {
+  try {
+    const { teacherId, date, reason } = req.body
+
+    // Get teacher information
+    const teacher = await User.findById(teacherId)
+    if (!teacher) {
+      return res.status(404).json({ message: "Teacher not found" })
+    }
+
+    // Create a new notification for the admin
+    const notification = new Notification({
+      type: "TEACHER_ABSENCE",
+      message: `Teacher ${teacher.name} has reported absence for ${date}.`,
+      data: { teacherId, teacherName: teacher.name, date, reason },
+      status: "PENDING",
+    })
+    await notification.save()
+
+    // Try to send email notification to admin if email config is available
+    try {
+      if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          secure: false,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        })
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: "admin@example.com", // This should be fetched from the database
+          subject: "Teacher Absence Report",
+          text: `Teacher ${teacher.name} has reported absence for ${date}. Reason: ${reason}`,
+        })
+      }
+    } catch (emailError) {
+      console.error("Error sending email notification:", emailError)
+      // Continue execution even if email fails
+    }
+
+    res.status(200).json({ message: "Absence reported successfully" })
+  } catch (error) {
+    console.error("Error reporting teacher absence:", error)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Handle schedule change requests
+router.post("/schedule-change-request", async (req, res) => {
+  try {
+    const { teacherId, teacherName, day, timeSlot, reason } = req.body
+
+    // Create a new notification for the admin
+    const notification = new Notification({
+      type: "SCHEDULE_CHANGE_REQUEST",
+      message: `Teacher ${teacherName} has requested a schedule change for ${day} at ${timeSlot}.`,
+      data: { teacherId, teacherName, day, timeSlot, reason },
+      status: "PENDING",
+    })
+    await notification.save()
+
+    // Try to send email notification to admin if email config is available
+    try {
+      if (process.env.SMTP_HOST && process.env.SMTP_PORT && process.env.EMAIL_USER && process.env.EMAIL_PASS) {
+        const transporter = nodemailer.createTransport({
+          host: process.env.SMTP_HOST,
+          port: process.env.SMTP_PORT,
+          secure: false,
+          auth: {
+            user: process.env.EMAIL_USER,
+            pass: process.env.EMAIL_PASS,
+          },
+        })
+
+        await transporter.sendMail({
+          from: process.env.EMAIL_USER,
+          to: "admin@example.com", // This should be fetched from the database
+          subject: "Schedule Change Request",
+          text: `Teacher ${teacherName} has requested a schedule change for ${day} at ${timeSlot}. Reason: ${reason}`,
+        })
+      }
+    } catch (emailError) {
+      console.error("Error sending email notification:", emailError)
+      // Continue execution even if email fails
+    }
+
+    res.status(200).json({ message: "Schedule change request submitted successfully" })
+  } catch (error) {
+    console.error("Error submitting schedule change request:", error)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Add a route to handle manual schedule changes by admin
+router.post("/manual-schedule-change", async (req, res) => {
+  try {
+    const { scheduleId, changes } = req.body
+
+    // Find the schedule
+    const schedule = await Schedule.findById(scheduleId)
+    if (!schedule) {
+      return res.status(404).json({ message: "Schedule not found" })
+    }
+
+    // Apply the changes
+    for (const change of changes) {
+      const { day, timeSlot, courseId, roomId } = change
+
+      // Find the slot in the timetable
+      const slotIndex = schedule.timetable.findIndex((slot) => slot.day === day && slot.startTime === timeSlot)
+
+      if (slotIndex !== -1) {
+        // Update the existing slot
+        schedule.timetable[slotIndex].course = courseId
+        schedule.timetable[slotIndex].room = roomId
+      } else {
+        // Add a new slot
+        schedule.timetable.push({
+          day,
+          startTime: timeSlot,
+          course: courseId,
+          room: roomId,
+        })
+      }
+    }
+
+    // Check for conflicts
+    const conflicts = await checkScheduleConflicts(schedule)
+    if (conflicts.length > 0) {
+      return res.status(400).json({
+        message: "The changes would create conflicts in the schedule",
+        conflicts,
+      })
+    }
+
+    // Save the updated schedule
+    await schedule.save()
+
+    res.status(200).json({
+      message: "Schedule updated successfully",
+      schedule,
+    })
+  } catch (error) {
+    console.error("Error updating schedule:", error)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+// Helper function to check for conflicts in a schedule
+async function checkScheduleConflicts(schedule) {
+  const conflicts = []
+
+  // Populate the schedule with course and room data
+  await Schedule.populate(schedule, {
+    path: "timetable.course",
+    populate: {
+      path: "instructor",
+    },
+  })
+  await Schedule.populate(schedule, {
+    path: "timetable.room",
+  })
+
+  // Check for room conflicts
+  for (let i = 0; i < schedule.timetable.length; i++) {
+    for (let j = i + 1; j < schedule.timetable.length; j++) {
+      const slot1 = schedule.timetable[i]
+      const slot2 = schedule.timetable[j]
+
+      // Check if same day and time
+      if (slot1.day === slot2.day && slot1.startTime === slot2.startTime) {
+        // Check for room conflict
+        if (slot1.room && slot2.room && slot1.room._id.toString() === slot2.room._id.toString()) {
+          conflicts.push({
+            type: "room",
+            message: `Room ${slot1.room.name} is scheduled for two different courses at the same time (${slot1.day} ${slot1.startTime})`,
+            slots: [i, j],
+          })
+        }
+
+        // Check for instructor conflict
+        if (
+          slot1.course &&
+          slot2.course &&
+          slot1.course.instructor &&
+          slot2.course.instructor &&
+          slot1.course.instructor._id.toString() === slot2.course.instructor._id.toString()
+        ) {
+          conflicts.push({
+            type: "instructor",
+            message: `Instructor ${slot1.course.instructor.name} is scheduled for two different courses at the same time (${slot1.day} ${slot1.startTime})`,
+            slots: [i, j],
+          })
+        }
+      }
+    }
+  }
+
+  return conflicts
+}
 
 export default router

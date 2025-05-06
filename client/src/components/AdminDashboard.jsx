@@ -6,6 +6,7 @@ import Registration from "./Registration";
 import AdminRegistration from "./AdminRegistration";
 import ScheduleDisplay from "./ScheduleDisplay";
 import TimetableManager from "./TimetableManager";
+import TimetableEditor from "./TimetableEditor";
 import { logout, getCurrentUser } from "../utils/auth";
 
 const API_URL = "http://localhost:3000/api/schedule";
@@ -15,10 +16,339 @@ const BRANCHES = [
   "Computer Science",
   "Electrical Engineering",
   "Mechanical Engineering",
-  "Civil Engineering",
+  "Chemical Engineering",
 ];
-const DIVISIONS = ["A", "B", "C"];
+const DIVISIONS = ["A", "B"];
 
+// Add a new component for handling manual schedule changes
+function ManualScheduleChange({ notification, onClose, onSuccess }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
+  const [schedules, setSchedules] = useState([]);
+  const [selectedSchedule, setSelectedSchedule] = useState("");
+  const [courses, setCourses] = useState([]);
+  const [rooms, setRooms] = useState([]);
+  const [changes, setChanges] = useState([
+    {
+      day: notification.data.day,
+      timeSlot: notification.data.timeSlot,
+      courseId: "",
+      roomId: "",
+    },
+  ]);
+
+  useEffect(() => {
+    fetchSchedules();
+    fetchCourses();
+    fetchRooms();
+  }, []);
+
+  const fetchSchedules = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/timetables`);
+      setSchedules(response.data);
+    } catch (error) {
+      console.error("Error fetching schedules:", error);
+      setError("Error fetching schedules. Please try again.");
+    }
+  };
+
+  const fetchCourses = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/courses-all`);
+      setCourses(response.data);
+    } catch (error) {
+      console.error("Error fetching courses:", error);
+      setError("Error fetching courses. Please try again.");
+    }
+  };
+
+  const fetchRooms = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/rooms`);
+      setRooms(response.data);
+    } catch (error) {
+      console.error("Error fetching rooms:", error);
+      setError("Error fetching rooms. Please try again.");
+    }
+  };
+
+  const handleChangeUpdate = (index, field, value) => {
+    const updatedChanges = [...changes];
+    updatedChanges[index][field] = value;
+    setChanges(updatedChanges);
+  };
+
+  const handleAddChange = () => {
+    setChanges([
+      ...changes,
+      { day: "Monday", timeSlot: "09:00", courseId: "", roomId: "" },
+    ]);
+  };
+
+  const handleRemoveChange = (index) => {
+    const updatedChanges = [...changes];
+    updatedChanges.splice(index, 1);
+    setChanges(updatedChanges);
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setLoading(true);
+    setError("");
+    setSuccess("");
+
+    try {
+      // Validate inputs
+      if (!selectedSchedule) {
+        setError("Please select a schedule to modify");
+        setLoading(false);
+        return;
+      }
+
+      for (const change of changes) {
+        if (!change.courseId || !change.roomId) {
+          setError("Please select a course and room for each change");
+          setLoading(false);
+          return;
+        }
+      }
+
+      // Submit the changes
+      const response = await axios.post(`${API_URL}/manual-schedule-change`, {
+        scheduleId: selectedSchedule,
+        changes,
+      });
+
+      setSuccess("Schedule updated successfully");
+
+      // Update the notification status
+      await axios.post(`${API_URL}/notifications/${notification._id}/approve`);
+
+      // Notify the parent component
+      onSuccess();
+    } catch (error) {
+      console.error("Error updating schedule:", error);
+      if (error.response?.data?.conflicts) {
+        setError(
+          `Error: ${
+            error.response.data.message
+          }. Conflicts detected: ${error.response.data.conflicts
+            .map((c) => c.message)
+            .join(", ")}`
+        );
+      } else {
+        setError(
+          error.response?.data?.message ||
+            "Error updating schedule. Please try again."
+        );
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div
+      className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div className="bg-white rounded-lg p-8 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+        <h2 className="text-2xl font-bold mb-4 text-indigo-600">
+          Manual Schedule Change
+        </h2>
+        <p className="mb-4">
+          <strong>Teacher:</strong> {notification.data.teacherName}
+          <br />
+          <strong>Request:</strong> Change schedule for {notification.data.day}{" "}
+          at {notification.data.timeSlot}
+          <br />
+          <strong>Reason:</strong> {notification.data.reason}
+        </p>
+
+        {error && <p className="text-red-500 text-sm italic mb-4">{error}</p>}
+        {success && (
+          <p className="text-green-500 text-sm italic mb-4">{success}</p>
+        )}
+
+        <form onSubmit={handleSubmit}>
+          <div className="mb-4">
+            <label
+              className="block text-gray-700 text-sm font-bold mb-2"
+              htmlFor="schedule"
+            >
+              Select Schedule to Modify
+            </label>
+            <select
+              id="schedule"
+              value={selectedSchedule}
+              onChange={(e) => setSelectedSchedule(e.target.value)}
+              className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+              required
+            >
+              <option value="">Select a schedule</option>
+              {schedules.map((schedule) => (
+                <option key={schedule._id} value={schedule._id}>
+                  Year {schedule.year} - {schedule.branch} - Division{" "}
+                  {schedule.division}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <h3 className="text-lg font-semibold mb-2">Schedule Changes</h3>
+
+          {changes.map((change, index) => (
+            <div
+              key={index}
+              className="mb-4 p-4 border border-gray-200 rounded-lg"
+            >
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">
+                    Day
+                  </label>
+                  <select
+                    value={change.day}
+                    onChange={(e) =>
+                      handleChangeUpdate(index, "day", e.target.value)
+                    }
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  >
+                    {[
+                      "Monday",
+                      "Tuesday",
+                      "Wednesday",
+                      "Thursday",
+                      "Friday",
+                    ].map((day) => (
+                      <option key={day} value={day}>
+                        {day}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">
+                    Time Slot
+                  </label>
+                  <select
+                    value={change.timeSlot}
+                    onChange={(e) =>
+                      handleChangeUpdate(index, "timeSlot", e.target.value)
+                    }
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  >
+                    {[
+                      "09:00",
+                      "10:00",
+                      "11:00",
+                      "12:00",
+                      "13:00",
+                      "14:00",
+                      "15:00",
+                      "16:00",
+                    ].map((time) => (
+                      <option key={time} value={time}>
+                        {time}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">
+                    Course
+                  </label>
+                  <select
+                    value={change.courseId}
+                    onChange={(e) =>
+                      handleChangeUpdate(index, "courseId", e.target.value)
+                    }
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  >
+                    <option value="">Select a course</option>
+                    {courses.map((course) => (
+                      <option key={course._id} value={course._id}>
+                        {course.name} ({course.code}) - {course.lectureType}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-gray-700 text-sm font-bold mb-2">
+                    Room
+                  </label>
+                  <select
+                    value={change.roomId}
+                    onChange={(e) =>
+                      handleChangeUpdate(index, "roomId", e.target.value)
+                    }
+                    className="shadow appearance-none border rounded w-full py-2 px-3 text-gray-700 leading-tight focus:outline-none focus:shadow-outline"
+                    required
+                  >
+                    <option value="">Select a room</option>
+                    {rooms.map((room) => (
+                      <option key={room._id} value={room._id}>
+                        {room.name} ({room.type})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {changes.length > 1 && (
+                <button
+                  type="button"
+                  onClick={() => handleRemoveChange(index)}
+                  className="mt-2 text-red-500 hover:text-red-700"
+                >
+                  Remove this change
+                </button>
+              )}
+            </div>
+          ))}
+
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={handleAddChange}
+              className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-3 rounded text-sm"
+            >
+              + Add Another Change
+            </button>
+          </div>
+
+          <div className="flex items-center justify-between">
+            <button
+              className={`bg-indigo-500 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out ${
+                loading ? "opacity-50 cursor-not-allowed" : ""
+              }`}
+              type="submit"
+              disabled={loading}
+            >
+              {loading ? "Processing..." : "Apply Changes"}
+            </button>
+            <button
+              className="bg-gray-500 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline transition duration-300 ease-in-out"
+              type="button"
+              onClick={onClose}
+              disabled={loading}
+            >
+              Cancel
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+// Update the notification handling in AdminDashboard
 function AdminDashboard() {
   const user = getCurrentUser();
 
@@ -36,6 +366,10 @@ function AdminDashboard() {
   const [showSchedule, setShowSchedule] = useState(false);
   const [currentSchedule, setCurrentSchedule] = useState(null);
   const [notifications, setNotifications] = useState([]);
+
+  const [showManualScheduleChange, setShowManualScheduleChange] =
+    useState(false);
+  const [selectedNotification, setSelectedNotification] = useState(null);
 
   useEffect(() => {
     if (activeTab === "schedule") {
@@ -142,35 +476,32 @@ function AdminDashboard() {
     }
   };
 
-  const handleViewSchedule = async () => {
+  const handleNotificationAction = async (notification, action) => {
     try {
-      const response = await axios.get(`${API_URL}/latest`, {
-        params: {
-          year: selectedYear,
-          branch: selectedBranch,
-          division: selectedDivision,
-        },
-      });
-      setCurrentSchedule(response.data);
-      setShowSchedule(true);
-    } catch (error) {
-      console.error("Error fetching schedule:", error);
-      setErrorMessage("Error fetching schedule. Please try again later.");
-    }
-  };
-
-  const handleNotificationAction = async (notificationId, action) => {
-    try {
-      await axios.post(`${API_URL}/notifications/${notificationId}/${action}`);
-      fetchNotifications();
-      if (action === "approve") {
-        // Trigger schedule update
-        await generateSchedule();
+      if (
+        notification.type === "SCHEDULE_CHANGE_REQUEST" &&
+        action === "approve"
+      ) {
+        // Show the manual schedule change interface
+        setSelectedNotification(notification);
+        setShowManualScheduleChange(true);
+      } else {
+        // Handle other notification types normally
+        await axios.post(
+          `${API_URL}/notifications/${notification._id}/${action}`
+        );
+        fetchNotifications();
       }
     } catch (error) {
       console.error(`Error ${action}ing notification:`, error);
       setErrorMessage(`Error ${action}ing notification. Please try again.`);
     }
+  };
+
+  const handleScheduleChangeSuccess = () => {
+    setShowManualScheduleChange(false);
+    setSelectedNotification(null);
+    fetchNotifications();
   };
 
   return (
@@ -184,7 +515,7 @@ function AdminDashboard() {
       <nav className="bg-indigo-600 shadow-lg mb-8">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
-            <h1 className="text-3xl font-bold text-white">Admin Dashboard</h1>
+            <h1 className="text-3xl font-serif text-white">Admin Dashboard</h1>
             <div className="flex space-x-4">
               <button
                 onClick={() => setShowRegistration(true)}
@@ -218,7 +549,7 @@ function AdminDashboard() {
               className={`${
                 activeTab === "schedule"
                   ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-gray-700 hover:text-gray-800 hover:border-gray-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               Schedule Generator
@@ -228,10 +559,20 @@ function AdminDashboard() {
               className={`${
                 activeTab === "timetables"
                   ? "border-indigo-500 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  : "border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300"
               } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
             >
               Timetable Manager
+            </button>
+            <button
+              onClick={() => setActiveTab("editor")}
+              className={`${
+                activeTab === "editor"
+                  ? "border-indigo-500 text-indigo-600"
+                  : "border-transparent text-gray-700 hover:text-gray-900 hover:border-gray-300"
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+            >
+              Timetable Editor
             </button>
           </nav>
         </div>
@@ -262,23 +603,34 @@ function AdminDashboard() {
                 {notifications.map((notification) => (
                   <div
                     key={notification._id}
-                    className="bg-yellow-100 border border-yellow-400 text-yellow-700 px-4 py-3 rounded relative mb-2"
+                    className={`border rounded-lg p-4 mb-4 ${
+                      notification.type === "SCHEDULE_CHANGE_REQUEST"
+                        ? "bg-blue-50 border-blue-200"
+                        : notification.type === "TEACHER_ABSENCE"
+                        ? "bg-yellow-50 border-yellow-200"
+                        : "bg-gray-50 border-gray-200"
+                    }`}
                   >
-                    <p>{notification.message}</p>
-                    <div className="mt-2">
+                    <p className="font-medium">{notification.message}</p>
+                    <p className="text-sm text-gray-600 mt-1">
+                      {new Date(notification.createdAt).toLocaleString()}
+                    </p>
+                    <div className="mt-2 flex space-x-2">
                       <button
                         onClick={() =>
-                          handleNotificationAction(notification._id, "approve")
+                          handleNotificationAction(notification, "approve")
                         }
-                        className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded mr-2"
+                        className="bg-green-500 hover:bg-green-700 text-white font-bold py-1 px-2 rounded text-sm"
                       >
-                        Approve
+                        {notification.type === "SCHEDULE_CHANGE_REQUEST"
+                          ? "Manage Change"
+                          : "Approve"}
                       </button>
                       <button
                         onClick={() =>
-                          handleNotificationAction(notification._id, "reject")
+                          handleNotificationAction(notification, "reject")
                         }
-                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded"
+                        className="bg-red-500 hover:bg-red-700 text-white font-bold py-1 px-2 rounded text-sm"
                       >
                         Reject
                       </button>
@@ -347,14 +699,6 @@ function AdminDashboard() {
                     {isLoading ? "Generating..." : "Generate Schedule"}
                   </button>
                 </div>
-                <div className="text-center mb-8">
-                  <button
-                    onClick={handleViewSchedule}
-                    className="bg-green-500 hover:bg-green-400 text-white font-bold py-3 px-6 rounded-full transition duration-300 ease-in-out transform hover:-translate-y-1 hover:scale-110"
-                  >
-                    View Schedule
-                  </button>
-                </div>
                 {showRegistration && (
                   <Registration
                     onClose={handleRegistrationClose}
@@ -410,7 +754,16 @@ function AdminDashboard() {
         )}
 
         {activeTab === "timetables" && <TimetableManager />}
+
+        {activeTab === "editor" && <TimetableEditor />}
       </div>
+      {showManualScheduleChange && selectedNotification && (
+        <ManualScheduleChange
+          notification={selectedNotification}
+          onClose={() => setShowManualScheduleChange(false)}
+          onSuccess={handleScheduleChangeSuccess}
+        />
+      )}
     </div>
   );
 }

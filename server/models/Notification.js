@@ -4,7 +4,14 @@ const notificationSchema = new mongoose.Schema({
     type: {
         type: String,
         required: true,
-        enum: ["AVAILABILITY_UPDATE", "CONFLICT_RESOLUTION_FAILED", "SCHEDULE_UPDATE_FAILED", "SCHEDULE_UPDATE_ERROR"],
+        enum: [
+            "AVAILABILITY_UPDATE",
+            "CONFLICT_RESOLUTION_FAILED",
+            "SCHEDULE_UPDATE_FAILED",
+            "SCHEDULE_UPDATE_ERROR",
+            "TEACHER_ABSENCE",
+            "SCHEDULE_CHANGE_REQUEST",
+        ],
     },
     message: {
         type: String,
@@ -25,4 +32,3 @@ const notificationSchema = new mongoose.Schema({
 })
 
 export default mongoose.model("Notification", notificationSchema)
-

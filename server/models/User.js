@@ -13,13 +13,10 @@ const userSchema = new mongoose.Schema({
   year: { type: Number, min: 1, max: 4 },
   // For students: which division they are in
   division: { type: String },
-  // For teachers: their availability
+  // For teachers: their availability - stored as a nested object
   availability: {
-    type: Map,
-    of: {
-      type: Map,
-      of: Boolean,
-    },
+    type: Object,
+    default: {},
   },
   createdAt: { type: Date, default: Date.now },
   createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
@@ -47,4 +44,3 @@ userSchema.methods.comparePassword = async function (candidatePassword) {
 }
 
 export default mongoose.model("User", userSchema)
-

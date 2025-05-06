@@ -79,6 +79,17 @@ router.post("/login", async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      department: user.department,
+    }
+
+    // Add role-specific fields
+    if (user.role === "teacher") {
+      userData.teachableYears = user.teachableYears || []
+    }
+
+    if (user.role === "student") {
+      userData.year = user.year
+      userData.division = user.division
     }
 
     console.log("Sending user data:", userData)
@@ -89,5 +100,48 @@ router.post("/login", async (req, res) => {
   }
 })
 
-export default router
+// Update user profile
+router.put("/update-profile", async (req, res) => {
+  try {
+    const { userId, year, department, division } = req.body
 
+    // Find user by ID
+    const user = await User.findById(userId)
+    if (!user) {
+      return res.status(404).json({ message: "User not found" })
+    }
+
+    // Update user fields
+    if (year) user.year = year
+    if (department) user.department = department
+    if (division) user.division = division
+
+    await user.save()
+
+    // Return updated user data (excluding password)
+    const userData = {
+      id: user._id.toString(),
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      department: user.department,
+    }
+
+    // Add role-specific fields
+    if (user.role === "teacher") {
+      userData.teachableYears = user.teachableYears || []
+    }
+
+    if (user.role === "student") {
+      userData.year = user.year
+      userData.division = user.division
+    }
+
+    res.json({ message: "Profile updated successfully", user: userData })
+  } catch (error) {
+    console.error("Error updating profile:", error)
+    res.status(500).json({ message: error.message })
+  }
+})
+
+export default router

@@ -79,7 +79,8 @@ function CourseForm({ addCourse }) {
           setFormData((prevState) => ({
             ...prevState,
             [name]: value,
-            duration: prevState.duration === "120" ? "" : prevState.duration, // Reset duration if it was set for lab
+            duration: prevState.duration === "120" ? "120" : prevState.duration,
+                      // Reset duration if it was set for lab
           }));
         }
       } else {
